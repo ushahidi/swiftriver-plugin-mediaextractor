@@ -17,6 +17,12 @@
 
 class MediaExtractor_Init {
 	
+	/**
+	 * List of known URL shortening services
+	 * @var array
+	 */
+	private $shortener_services = array();
+	
 	public function __construct()
 	{	
 		// Load Simple_HTML_DOM
@@ -30,6 +36,9 @@ class MediaExtractor_Init {
 
 		// Hook into drop post processing
 		Swiftriver_Event::add('swiftriver.droplet.extract_metadata', array($this, 'parse_media'));
+		
+		// Load the list of known URL shorteners
+		$this->shortener_services = Kohana::$config->load('shorteners')->get('services');
 	}
 
 	/**
@@ -61,7 +70,11 @@ class MediaExtractor_Init {
 					}
 					else
 					{
-						$url = $this->full($url);						
+						// Only expand URLs from known shortening services
+						if ($this->_is_short_url($url))
+						{
+							$url = $this->full($url);
+						}
 						$this->parse_link($url, $images, $links);
 					}
 				}
@@ -76,7 +89,12 @@ class MediaExtractor_Init {
 			{
 				foreach ($text_matches[0] as $key => $url)
 				{
-					$url = $this->full($url);						
+					// Only expand urls from known shortening services
+					if ($this->_is_short_url($url))
+					{ 
+						$url = $this->full($url);
+					}
+					
 					$this->parse_link($url, $images, $links);
 				}
 			}
@@ -183,37 +201,37 @@ class MediaExtractor_Init {
 		switch (parse_url($url, PHP_URL_HOST))
 		{
 			case 'yfrog.com':
-				$ret = $this->_extractyfrog($url);
+				$ret = $this->_extract_yfrog($url);
 			break;
 			case 'plixi.com':
-				$ret = $this->_extractplixi($url);
+				$ret = $this->_extract_plixi($url);
 			break;
 			case 'instagr.am':
-				$ret = $this->_extractinstagram($url);
+				$ret = $this->_extract_instagram($url);
 			break;
 			case 'twitpic.com':
-				$ret = $this->_extracttwitpic($url);
+				$ret = $this->_extract_twitpic($url);
 			break;
 			case 'flic.kr':
-				$ret = $this->_extractflickr($url);
+				$ret = $this->_extract_flickr($url);
 			break;
 		}
 		
 		return $ret;
 	}
 
-	private function _extractyfrog($link)
+	private function _extract_yfrog($link)
 	{
 		return trim($link,'”."').':iphone';
 	}
 
-	private function _extracttwitpic($link)
+	private function _extract_twitpic($link)
 	{
 		$linkparts = explode('/',$link);
 		return 'http://twitpic.com/show/large/'.$linkparts[3];
 	}
 
-	private function _extractflickr($link)
+	private function _extract_flickr($link)
 	{
 		$html = file_get_html($link);
 		foreach ($html->find('img.photo') as $element)
@@ -222,7 +240,7 @@ class MediaExtractor_Init {
 		}
 	}
 
-	private function _extractinstagram($link)
+	private function _extract_instagram($link)
 	{
 		$html = file_get_html($link);
 		foreach ($html->find('img.photo') as $element)
@@ -231,7 +249,7 @@ class MediaExtractor_Init {
 		}
 	}
 
-	private function _extractplixi($link)
+	private function _extract_plixi($link)
 	{
 		$html = file_get_html($link);
 		foreach ($html->find('img[id=photo]') as $element)
@@ -241,45 +259,51 @@ class MediaExtractor_Init {
 	}
 	
 	/**
-	 * Take short url's and determine full urls using cURL
+	 * Expands a short URL
 	 *
 	 * @param   string $url Short URL
 	 * @return  string $url Full/Expanded URL
 	 */
 	private function full($url = NULL)
 	{
-		// Expand shortened URLs only
-		if ($url AND strlen($url < 25) AND strlen(parse_url($url, PHP_URL_HOST)) < 10)
+		try
 		{
-			try
-			{
-				$headers = get_headers($url,1);
-			}
-			catch (Exception $e)
-			{
-				// Some kind of error
-				// Abandon and return original url
-				Kohana::$log->add(Log::ERROR, Kohana_Exception::text($e));
-				return $url;
-			}
-
-			if (empty($headers) )
-			{
-				return $url;
-			}
-
-			if ( ! isset($headers['Location']))
-			{
-				return $url;
-			}
-			$url = $headers['Location'];
-			
-			// If an Array is returned for redirects
-			// Return the last item in the array
-			return is_array($url)? end($url) :  $url;
+			$headers = get_headers($url,1);
+		}
+		catch (Exception $e)
+		{
+			// Some kind of error
+			// Abandon and return original url
+			Kohana::$log->add(Log::ERROR, Kohana_Exception::text($e));
+			return $url;
 		}
 
-		return $url;
+		if (empty($headers))
+		{
+			return $url;
+		}
+
+		if ( ! isset($headers['Location']))
+		{
+			return $url;
+		}
+		$url = $headers['Location'];
+		
+		// If an Array is returned for redirects
+		// Return the last item in the array
+		return is_array($url)? end($url) :  $url;
+	}
+	
+	/**
+	 * Given a URL, checks it has been shortened
+	 *
+	 * @param string $url URL to be checked
+	 * @return bool
+	 */
+	private function _is_short_url($url)
+	{
+		$url_host = parse_url($url, PHP_URL_HOST);
+		return in_array($url_host, $this->shortener_services);
 	}
 }
 
