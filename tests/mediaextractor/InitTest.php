@@ -8,7 +8,7 @@
  * @copyright  (c) 2008-2012 Ushahidi Inc <http://www.ushahidi.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU General Public License v3 (GPLv3)
  */
-class SwiftRiver_MediaExtractor_Test extends Unittest_TestCase {
+class MediaExtractor_InitTest extends Unittest_TestCase {
 	
 	/**
 	 * Override default setUp
